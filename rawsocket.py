@@ -24,26 +24,27 @@ import ip
 # This is the middle layer of RawSocket
 class RawSocket:
     def __init__(self):
-        self.socket = RawTCPSocket("wlan0")
-        #self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sockfd = RawTCPSocket("wlan0")
+        #self.send_sockfd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     def connect(self, (hostname, port)):
-        self.socket.connect((hostname, port))
+        self.sockfd.connect((hostname, port))
 
     def close(self):
-        self.socket.close()
+        self.sockfd.close()
 
     def send(self, data):
-        self.socket.send(data)
+        self.sockfd.send(data)
 
     def recv(self, length):
-        return self.socket.recv(length) 
+        return self.sockfd.recv(length) 
 
 
 # This is the TCP layer RawSocket
 class RawTCPSocket:
     def __init__(self, ifname):
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
+        self.send_sockfd = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
+        self.recv_sockfd = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
         self.src_port = random.randint(49152, 65535)
         self.src_ip = self._getip(ifname)
         self.dst_ip = ""
@@ -57,7 +58,7 @@ class RawTCPSocket:
 
     def _getip(self, ifname):
        return socket.inet_ntoa(fcntl.ioctl(
-                               self.socket.fileno(),
+                               self.send_sockfd.fileno(),
                                0x8915,  # SIOCGIFADDR
                                struct.pack('256s', ifname[:15])
                                )[20:24])
@@ -68,29 +69,36 @@ class RawTCPSocket:
     def _send(self, data="", fin=0, syn=0, rst=0, psh=0, ack=0, urg=0):
         if ack == 0:
             self.ack_seq=0
-        tcphdr = tcp.TCPHeader(src_ip=self.src_ip, dst_ip=self.dst_ip, \
+        tcppkt = tcp.TCPPacket(src_ip=self.src_ip, dst_ip=self.dst_ip, \
                         src_port=self.src_port, dst_port=self.dst_port, data=data, \
                         win=self.awnd, seq=self.seq, ack_seq=self.ack_seq, \
                         fin=fin, syn=syn, rst=rst, psh=psh, ack=ack, urg=urg)
-
-        packet = tcphdr.assemble(data)
-        self.socket.sendto(packet, (self. dst_ip, self.src_port))
+        tcppkt.payload = data
+        packet = tcppkt.assemble()
+        print "\nSending TCP Packet..."
+        print tcppkt
+        ippacket = ip.IPPacket(self.src_ip, self.dst_ip)
+        ippacket.set_payload(packet)
+        print ippacket
+        self.send_sockfd.sendto(ippacket.assemble(), (self. dst_ip, self.src_port))
         self.seq += len(data)
 
     def _recv(self, byte):
         # Parse the Connection and Shutdown
         #print "recv"
         #time.sleep(0.01)
-        buf = self.socket.recv(byte)
-        tcphdr = tcp.TCPHeader(src_ip=self.src_ip, dst_ip=self.dst_ip)
-        recv_packet = tcphdr.dissemble(buf[20:])
+        buf = self.recv_sockfd.recv(byte)
+        tcppkt = tcp.TCPPacket(src_ip=self.src_ip, dst_ip=self.dst_ip)
+        recv_packet = tcppkt.dissemble(buf[20:])
         #recv_packet = self._unpack_tcp(buf[20:])
 
         count= 3
         while not recv_packet.dst == self.src_port:
             #print recv_packet.dst, self.src_port
-            tcphdr = tcp.TCPHeader(src_ip=self.src_ip, dst_ip=self.dst_ip)
-            recv_packet = tcphdr.dissemble(buf[20:])
+            ippkt = ip.IPPacket()
+            ippkt.dissemble(buf)
+            tcppkt = tcp.TCPPacket(src_ip=self.src_ip, dst_ip=self.dst_ip)
+            recv_packet = tcppkt.dissemble(ip.payload)
             count -= 1
             if count == 0:
                 sys.exit(1)
@@ -106,20 +114,22 @@ class RawTCPSocket:
         recv_data = ""
         #time.sleep(0.01)
         while recv_size == 0:
-            buf = self.socket.recv(byte)
-            tcphdr = tcp.TCPHeader(src_ip=self.src_ip, dst_ip=self.dst_ip)
-            recv_pack = tcphdr.dissemble(buf[20:])
+            buf = self.recv_sockfd.recv(byte)
+            tcppkt = tcp.TCPPacket(src_ip=self.src_ip, dst_ip=self.dst_ip)
+            print "\nRecving data..."
+            recv_pack = tcppkt.dissemble(buf[20:])
+            print recv_pack 
             #recv_pack = self._unpack_tcp(buf[20:])
             count = 5
             while not recv_pack.dst == self.src_port:
                 #print recv_pack.dst, self.src_port
-                recv_pack = tcphdr.dissemble(buf[20:])
+                recv_pack = tcppkt.dissemble(buf[20:])
                 self._send(ack=1)
                 count -= 1
                 if count == 0:
                     sys.exit(1)
-            recv_size += len(recv_pack.data)
-            recv_data += recv_pack.data
+            recv_size += len(recv_pack.payload)
+            recv_data += recv_pack.payload
             #print recv_pack.data
 
         self.ack_seq += recv_size
@@ -146,7 +156,7 @@ class RawTCPSocket:
 
     def close(self):
         self._send(data="", fin=1)
-        recv_packet = self._recv(4096)
+        #recv_packet = self._recv(4096)
         self._send(data="", ack=1)
-        self.socket.close()
+        self.send_sockfd.close()
         

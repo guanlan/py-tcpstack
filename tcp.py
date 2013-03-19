@@ -4,7 +4,7 @@ import random, math
 import fcntl
 import struct
 
-class TCPHeader:
+class TCPPacket:
     def __init__(self, src_ip="", dst_ip="", src_port=0, dst_port=80, data="",\
                  seq=0, ack_seq=0, offset=0, fin=0, syn=0, \
                  rst=0, psh=0, ack=0, urg=0, win=0, urp=0):
@@ -32,8 +32,18 @@ class TCPHeader:
         self.win = win
         self.csum = 0
         self.urp = urp
-        self.data = data
-    
+        self.payload = data
+
+    def __repr__(self):
+        rep = '[*TCP Packet* Source: %s:%d  Dest: %s:%d Sequence Number:%d  Acknowledgement: %d  Flag:%d ' % (socket.inet_ntoa(self.src_ip), self.src, socket.inet_ntoa(self.dst_ip), self.dst, self.seq, self.ack_seq, self.flags)
+        if len(self.payload) == 0:
+            rep += "\'\'>"
+        elif len(self.payload) < 100:
+            rep += "%s]" % repr(self.payload)
+        else:
+            rep += "%s]" % repr(self.payload[:100] + '...')
+        return rep
+
     def _header(self):
         return  struct.pack('!HHLLBBHHH', \
                             self.src, self.dst, self.seq, \
@@ -43,12 +53,12 @@ class TCPHeader:
 
     def _pseudo_header(self):
         placeholder = 0
-        tcp_length = len(self._header()) + len(self.data)
+        tcp_length = len(self._header()) + len(self.payload)
         psh = struct.pack('!4s4sBBH' , \
                           self.src_ip , self.dst_ip , \
                           placeholder , socket.IPPROTO_TCP , \
                           tcp_length);
-        psh = psh + self._header() + self.data;
+        psh = psh + self._header() + self.payload;
         return psh
 
     def _checksum(self, msg):
@@ -72,8 +82,8 @@ class TCPHeader:
                self.ack_seq, self.offset_res, self.flags,  self.win) + \
                struct.pack('H' , csum) + struct.pack('!H' , self.urp)
 
-    def assemble(self, data):
-        return self.header() + data
+    def assemble(self):
+        return self.header() + self.payload 
     
     def dissemble(self, buf):
         # Parse the initial 20 bits
@@ -107,5 +117,5 @@ class TCPHeader:
                 i += 1
         # Parse the data bits
 
-        self.data=buf[offset*4:]
+        self.payload=buf[offset*4:]
         return self

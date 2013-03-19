@@ -127,7 +127,7 @@ class HTTPConnection:
                 while read_size < current_size:
                     end_index = bodybuffer.find('\r\n')
                     if end_index == -1 or end_index < current_size:
-                        bodybuffer += self.connection.recv(4096) 
+                        bodybuffer += self.conn.recv(4096) 
                     elif end_index == current_size:
                         read_size = current_size
                         body += bodybuffer[:end_index]
