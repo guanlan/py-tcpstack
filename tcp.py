@@ -6,7 +6,7 @@ import struct
 import utils
 
 class TCPPacket:
-    def __init__(self, src_ip="", dst_ip="", src_port=0, dst_port=80, data="",\
+    def __init__(self, src_ip="127.0.0.1", dst_ip="127.0.0.1", src_port=0, dst_port=80, data="",\
                  seq=0, ack_seq=0, offset=0, fin=0, syn=0, \
                  rst=0, psh=0, ack=0, urg=0, win=0, urp=0):
         # u 16 H
@@ -36,9 +36,9 @@ class TCPPacket:
         self.payload = data
 
     def __repr__(self):
-        rep = '[*TCP Packet* Source: %s:%d  Dest: %s:%d Sequence Number:%d  Acknowledgement: %d  Flag:%d ' % (socket.inet_ntoa(self.src_ip), self.src, socket.inet_ntoa(self.dst_ip), self.dst, self.seq, self.ack_seq, self.flags)
+        rep = '[*TCP Packet* Source port: %d  Dest port: %d Sequence Number:%d  Acknowledgement: %d  Flag:%d ' % (self.src, self.dst, self.seq, self.ack_seq, self.flags)
         if len(self.payload) == 0:
-            rep += "\'\'>"
+            rep += "\'\']"
         elif len(self.payload) < 100:
             rep += "%s]" % repr(self.payload)
         else:
@@ -90,17 +90,6 @@ class TCPPacket:
 
         # Parse the Option bits
         offset=self.offset_res >> 4
-        if (offset > 5):
-            i = 5
-            while i < offset:
-                op_kind, = struct.unpack('!B', buf[i*4:i*4+1])
-                if op_kind == 0:
-                    break
-                if op_kind == 2:
-                    op_len, = struct.unpack('!B', buf[i*4+1:i*4+2])
-                    op_data, = struct.unpack('!H', buf[i*4+2:i*4+4])
-                    self.mss = op_data
-                i += 1
         # Parse the data bits
 
         self.payload=buf[offset*4:]

@@ -25,7 +25,7 @@ class IPPacket:
 
     def __repr__(self):
         rep = "[*IP Packet* ver:%d id=%d proto=%d src=%s dst=%s datalen=%d]" % \
-               (self.ver, self.id, self.protocol, self.src_ip, self.dst_ip,
+               (self.ver, self.id, self.protocol, socket.inet_ntoa(self.saddr), socket.inet_ntoa(self.daddr),
                 self.tot_len)
         return rep  
 
@@ -49,7 +49,7 @@ class IPPacket:
         return ''.join(packet)
 
     def dissemble(self, buf):
-        res = struct.unpack('!BBHHHBBH4s4s', buf)
+        res = struct.unpack('!BBHHHBBH4s4s', buf[:20])
         self.ver_ihl = res[0]
         self.tos = res[1]
         self.tot_len = res[2]

@@ -10,7 +10,7 @@ class EthernetFrame():
         self.payload = payload 
 
     def __repr__(self):
-        rep = "<Eth Dest MAC: %s  Src MAC: %s Protocol:%d>" % (self.eth_addr_repr(self.des_mac),self.eth_addr_repr(self.src_mac), self.ether_type)
+        rep = "<*Eth Frame* Dest MAC: %s  Src MAC: %s Protocol:%d>" % (self.eth_addr_repr(self.des_mac),self.eth_addr_repr(self.src_mac), self.ether_type)
         return rep
 
     def disassemble(self, packet):
@@ -21,7 +21,7 @@ class EthernetFrame():
         self.des_mac = eth[0]
         self.src_mac = eth[1] 
         self.ether_type = socket.ntohs(eth[2])
-        self.payload = packet[self.eth_length:-1]
+        self.payload = packet[self.eth_length:]
 
     def assemble(self):
         packet = pack('!6s6sH', self.des_mac, self.src_mac, self.ether_type)

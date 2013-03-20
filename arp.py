@@ -22,7 +22,7 @@ class ARPPacket():
         #parse ethernet header
         print "len:"
         print len(payload)
-        arp = unpack('!HHBBH6s4s6s3s' , payload)
+        arp = unpack('!HHBBH6s4s6s3s' , payload[:-1])
         self.opcode = arp[4]
         self.sender_mac= arp[5] 
         self.sender_ip = arp[6] 

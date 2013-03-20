@@ -28,7 +28,7 @@ import arp
 class RawSocket:
     def __init__(self):
         self.sockfd = RawTCPSocket("wlan0")
-        #self.send_sockfd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        #self.sockfd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     def connect(self, (hostname, port)):
         self.sockfd.connect((hostname, port))
@@ -46,9 +46,9 @@ class RawSocket:
 # This is the TCP layer RawSocket
 class RawTCPSocket:
     def __init__(self, ifname):
-        self.send_sockfd = socket.socket(socket.AF_PACKET, socket.SOCK_RAW)
-        self.send_sockfd.bind((ifname,socket.SOCK_RAW))
-        self.recv_sockfd = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
+        self.sockfd = socket.socket(socket.AF_PACKET, socket.SOCK_RAW)
+        self.sockfd.bind((ifname,socket.SOCK_RAW))
+        #self.recv_sockfd = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
         self.src_port = random.randint(49152, 65535)
         self.ifname = ifname
         self.src_ip = socket.inet_ntoa(self._getip())
@@ -64,7 +64,7 @@ class RawTCPSocket:
 
     def _getip(self):
        ifname = self.ifname
-       return fcntl.ioctl(self.send_sockfd.fileno(),
+       return fcntl.ioctl(self.sockfd.fileno(),
                          0x8915,  # SIOCGIFADDR
                          struct.pack('256s', ifname[:15])
                          )[20:24]
@@ -79,7 +79,7 @@ class RawTCPSocket:
 
     def _get_hw_addr(self):
         ifname = self.ifname
-        info = fcntl.ioctl(self.send_sockfd.fileno(), 0x8927,  struct.pack('256s', ifname[:15]))
+        info = fcntl.ioctl(self.sockfd.fileno(), 0x8927,  struct.pack('256s', ifname[:15]))
         #return ''.join(['%02x:' % ord(char) for char in info[18:24]])[:-1]
         return info[18:24]
 
@@ -93,9 +93,9 @@ class RawTCPSocket:
         etherframe = eth.EthernetFrame(self.ifname, target_addr, sender_addr, 0x806) 
         arppkt = arp.ARPPacket(sender_addr, sender_ip, target_addr, target_ip)
         etherframe.payload = arppkt.assemble()
-        self.send_sockfd.send(etherframe.assemble())
+        self.sockfd.send(etherframe.assemble())
         while True:
-            buf = self.send_sockfd.recvfrom(4096)
+            buf = self.sockfd.recvfrom(4096)
             etherframe.disassemble(buf)
             if etherframe.ether_type  == 1544:
                 break
@@ -117,7 +117,7 @@ class RawTCPSocket:
                         fin=fin, syn=syn, rst=rst, psh=psh, ack=ack, urg=urg)
         tcppkt.payload = data
         packet = tcppkt.assemble()
-        print "\nSending TCP Packet..."
+        print "\n>>>>>>>>Sending TCP Packet..."
         print tcppkt
         ippacket = ip.IPPacket(self.src_ip, self.dst_ip)
         ippacket.set_payload(packet)
@@ -126,54 +126,63 @@ class RawTCPSocket:
         etherframe = eth.EthernetFrame(self.ifname, target_mac,self._get_hw_addr(), 0x800)
         etherframe.payload = ippacket.assemble()
         print etherframe
-        self.send_sockfd.send(etherframe.assemble())
+        self.sockfd.send(etherframe.assemble())
         self.seq += len(data)
 
     def _recv(self, byte):
         # Parse the Connection and Shutdown
         #print "recv"
         #time.sleep(0.01)
-        buf = self.recv_sockfd.recv(byte)
-        tcppkt = tcp.TCPPacket(src_ip=self.src_ip, dst_ip=self.dst_ip)
-        recv_packet = tcppkt.dissemble(buf[20:])
-        #recv_packet = self._unpack_tcp(buf[20:])
-
-        count= 3
-        while not recv_packet.dst == self.src_port:
-            #print recv_packet.dst, self.src_port
+        while True:
+            buf = self.sockfd.recvfrom(byte)
+            etherframe = eth.EthernetFrame()
+            etherframe.disassemble(buf)
+            print etherframe
+            if etherframe.ether_type  != 8:
+                continue
             ippkt = ip.IPPacket()
-            ippkt.dissemble(buf)
-            tcppkt = tcp.TCPPacket(src_ip=self.src_ip, dst_ip=self.dst_ip)
-            recv_packet = tcppkt.dissemble(ip.payload)
-            count -= 1
-            if count == 0:
-                sys.exit(1)
+            ippkt.dissemble(etherframe.payload)
+            if ippkt.protocol  !=  6:
+                continue
+            print ippkt
+            tcppkt = tcp.TCPPacket()
+            recv_packet = tcppkt.dissemble(ippkt.payload)
+            print recv_packet
+            if recv_packet.dst != self.src_port:
+                continue
+            self.ack_seq = recv_packet.seq + 1
+            self.seq = recv_packet.ack_seq 
+            return recv_packet
 
-        self.ack_seq = recv_packet.seq + 1
-        self.seq = recv_packet.ack_seq 
-
-        return recv_packet
-   
     def _recv_data(self, byte):
         # Parse the Received Data
         recv_size = 0
         recv_data = ""
         #time.sleep(0.01)
         while recv_size == 0:
-            buf = self.recv_sockfd.recv(byte)
-            tcppkt = tcp.TCPPacket(src_ip=self.src_ip, dst_ip=self.dst_ip)
-            print "\nRecving data..."
-            recv_pack = tcppkt.dissemble(buf[20:])
+            print "\n<<<<<<<<Recving Packet..."
+            buf = self.sockfd.recvfrom(byte)
+            
+            etherframe = eth.EthernetFrame()
+            etherframe.disassemble(buf)
+            print etherframe
+            if etherframe.ether_type  != 8:
+                continue
+            ippkt = ip.IPPacket()
+            ippkt.dissemble(etherframe.payload)
+            print ippkt
+            #self._showbit(ippkt.payload)
+            if ippkt.protocol  !=  6:
+                continue
+            tcppkt = tcp.TCPPacket()
+            recv_pack = tcppkt.dissemble(ippkt.payload)
             print recv_pack 
             #recv_pack = self._unpack_tcp(buf[20:])
-            count = 5
-            while not recv_pack.dst == self.src_port:
+            if recv_pack.dst != self.src_port:
+                continue
                 #print recv_pack.dst, self.src_port
-                recv_pack = tcppkt.dissemble(buf[20:])
-                self._send(ack=1)
-                count -= 1
-                if count == 0:
-                    sys.exit(1)
+            recv_pack = tcppkt.dissemble(ippkt.payload)
+            self._send(ack=1)
             recv_size += len(recv_pack.payload)
             recv_data += recv_pack.payload
             #print recv_pack.data
@@ -205,5 +214,5 @@ class RawTCPSocket:
         self._send(data="", fin=1)
         #recv_packet = self._recv(4096)
         self._send(data="", ack=1)
-        self.send_sockfd.close()
+        self.sockfd.close()
         
