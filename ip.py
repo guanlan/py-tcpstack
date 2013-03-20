@@ -3,6 +3,7 @@ import socket
 import random, math
 import fcntl
 import struct
+import utils
 
 class IPPacket:
     def __init__(self, src_ip='127.0.0.1', dst_ip='127.0.0.1'):
@@ -17,7 +18,7 @@ class IPPacket:
         self.frag_off = 0
         self.ttl = 64
         self.protocol = socket.IPPROTO_TCP
-        self.csum = 0
+        self.cksum = 0
         self.saddr = socket.inet_aton(self.src_ip)
         self.daddr = socket.inet_aton(self.dst_ip)
         self.payload = ""
@@ -29,17 +30,23 @@ class IPPacket:
         return rep  
 
     def _header(self):
-        return  struct.pack('!BBHHHBBH4s4s', self.ver_ihl, self.tos, \
+        return  struct.pack('!BBHHHBB', self.ver_ihl, self.tos, \
                            self.tot_len, self.id, self.frag_off, \
-                           self.ttl, self.protocol, self.csum, \
-                           self.saddr, self.daddr)
+                           self.ttl, self.protocol)
     def set_payload(self, payload):
         self.payload = payload
-        self.tot_len  = 20 + len(payload)*8
+        self.tot_len  = 20 + len(payload)
 
 
     def assemble(self):
-        return self._header() + self.payload
+        header = self._header() 
+        self.cksum = utils.checksum(header + '\000\000' + self.saddr +
+                                  self.daddr)
+        packet = [self._header(), 
+                    struct.pack('H', self.cksum), 
+                    self.saddr, self.daddr, 
+                    self.payload]
+        return ''.join(packet)
 
     def dissemble(self, buf):
         res = struct.unpack('!BBHHHBBH4s4s', buf)

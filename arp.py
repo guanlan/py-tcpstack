@@ -19,9 +19,10 @@ class ARPPacket():
         return rep
 
     def disassemble(self, payload):
-        packet = packet[0]
         #parse ethernet header
-        arp = unpack('!HHBBH6s4s6s4s' , payload)
+        print "len:"
+        print len(payload)
+        arp = unpack('!HHBBH6s4s6s3s' , payload)
         self.opcode = arp[4]
         self.sender_mac= arp[5] 
         self.sender_ip = arp[6] 

@@ -46,11 +46,12 @@ class RawSocket:
 # This is the TCP layer RawSocket
 class RawTCPSocket:
     def __init__(self, ifname):
-        self.send_sockfd = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
+        self.send_sockfd = socket.socket(socket.AF_PACKET, socket.SOCK_RAW)
+        self.send_sockfd.bind((ifname,socket.SOCK_RAW))
         self.recv_sockfd = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
         self.src_port = random.randint(49152, 65535)
         self.ifname = ifname
-        self.src_ip = self._getip()
+        self.src_ip = socket.inet_ntoa(self._getip())
         self.dst_ip = ""
         self.dst_port = 80
         self.seq = 0
@@ -59,37 +60,50 @@ class RawTCPSocket:
         self.rtt = 1
         self.state = 0
         self.mss = 40960
+        self.gateway_mac = None 
 
     def _getip(self):
        ifname = self.ifname
-       return socket.inet_ntoa(fcntl.ioctl(
-                               self.send_sockfd.fileno(),
-                               0x8915,  # SIOCGIFADDR
-                               struct.pack('256s', ifname[:15])
-                               )[20:24])
+       return fcntl.ioctl(self.send_sockfd.fileno(),
+                         0x8915,  # SIOCGIFADDR
+                         struct.pack('256s', ifname[:15])
+                         )[20:24]
 
     def _get_gateway_ip(self):
         ifname = self.ifname
         cmd = "ip route list dev "+ ifname + " | awk ' /^default/ {print $3}'"
         fin,fout = os.popen4(cmd)
         result = fout.read()
-        return result
+        print result
+        return socket.inet_aton(result)
 
     def _get_hw_addr(self):
         ifname = self.ifname
         info = fcntl.ioctl(self.send_sockfd.fileno(), 0x8927,  struct.pack('256s', ifname[:15]))
-        return ''.join(['%02x:' % ord(char) for char in info[18:24]])[:-1]
+        #return ''.join(['%02x:' % ord(char) for char in info[18:24]])[:-1]
+        return info[18:24]
 
-    def probe_ip(self, target_ip):
-        sender_mac = self._get_hw_addr() 
+    def probe_gateway_mac(self):
+        if self.gateway_mac  != None:
+            return self.gateway_mac
+        sender_addr = self._get_hw_addr() 
         sender_ip = self._getip()
         target_addr = "\xff\xff\xff\xff\xff\xff"
         target_ip = self._get_gateway_ip()
-        etherframe = EthernetFrame(self.ifname, target_addr, sender_addr, 0x806) 
-        arp = arp.ARPPacket(sender_mac, sender_ip, target_addr, target_ip)
-        etherframe.payload = arp.assemble()
-        packet = etherframe.assemble()
-
+        etherframe = eth.EthernetFrame(self.ifname, target_addr, sender_addr, 0x806) 
+        arppkt = arp.ARPPacket(sender_addr, sender_ip, target_addr, target_ip)
+        etherframe.payload = arppkt.assemble()
+        self.send_sockfd.send(etherframe.assemble())
+        while True:
+            buf = self.send_sockfd.recvfrom(4096)
+            etherframe.disassemble(buf)
+            if etherframe.ether_type  == 1544:
+                break
+        arppkt.disassemble(etherframe.payload)
+        print "opcodeode :%d" % arppkt.opcode
+        print etherframe.eth_addr_repr(arppkt.sender_mac)
+        self.gateway_mac = arppkt.sender_mac
+        return arppkt.sender_mac
 
     def _showbit(self, bits):
         print ":".join("{0:x}".format(ord(c)) for c in bits)
@@ -105,12 +119,14 @@ class RawTCPSocket:
         packet = tcppkt.assemble()
         print "\nSending TCP Packet..."
         print tcppkt
-        print self._get_hw_addr()
-        print self._get_gateway_ip()
         ippacket = ip.IPPacket(self.src_ip, self.dst_ip)
         ippacket.set_payload(packet)
         print ippacket
-        self.send_sockfd.sendto(ippacket.assemble(), (self. dst_ip, self.src_port))
+        target_mac = self.probe_gateway_mac()
+        etherframe = eth.EthernetFrame(self.ifname, target_mac,self._get_hw_addr(), 0x800)
+        etherframe.payload = ippacket.assemble()
+        print etherframe
+        self.send_sockfd.send(etherframe.assemble())
         self.seq += len(data)
 
     def _recv(self, byte):
@@ -167,6 +183,7 @@ class RawTCPSocket:
         return recv_data
 
     def connect(self, (hostname, port)):
+        print hostname
         self.dst_ip = socket.gethostbyname(hostname)
         self.dst_port = port
         self.seq = random.randint(math.pow(2,1), math.pow(2, 10))
