@@ -1,8 +1,13 @@
 import socket
 from struct import *
-class EthernetFrame(object):
-    def __init__(self):
+class EthernetFrame():
+    def __init__(self, ifname = 'eth0', des_mac='', src_mac='', ether_type = 4, payload = ''):
         self.eth_length = 14
+        self.ifname = ifname
+        self.des_mac = des_mac
+        self.src_mac = src_mac
+        self.ether_type = ether_type
+        self.payload = payload 
 
     def __repr__(self):
         rep = "<Eth Dest MAC: %s  Src MAC: %s Protocol:%d>" % (self.eth_addr_repr(self.des_mac),self.eth_addr_repr(self.src_mac), self.ether_type)
@@ -18,9 +23,9 @@ class EthernetFrame(object):
         self.ether_type = socket.ntohs(eth[2])
         self.payload = packet[self.eth_length:-1]
 
-    def assemble(self, payload):
+    def assemble(self):
         packet = pack('!6s6sH', self.des_mac, self.src_mac, self.ether_type)
-        packet += payload
+        packet += self.payload
         return packet
 
     def eth_addr_repr(self, a) :

@@ -20,6 +20,9 @@ import struct
 import time
 import tcp
 import ip
+import eth
+import os
+import arp
 
 # This is the middle layer of RawSocket
 class RawSocket:
@@ -46,7 +49,8 @@ class RawTCPSocket:
         self.send_sockfd = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
         self.recv_sockfd = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
         self.src_port = random.randint(49152, 65535)
-        self.src_ip = self._getip(ifname)
+        self.ifname = ifname
+        self.src_ip = self._getip()
         self.dst_ip = ""
         self.dst_port = 80
         self.seq = 0
@@ -56,12 +60,36 @@ class RawTCPSocket:
         self.state = 0
         self.mss = 40960
 
-    def _getip(self, ifname):
+    def _getip(self):
+       ifname = self.ifname
        return socket.inet_ntoa(fcntl.ioctl(
                                self.send_sockfd.fileno(),
                                0x8915,  # SIOCGIFADDR
                                struct.pack('256s', ifname[:15])
                                )[20:24])
+
+    def _get_gateway_ip(self):
+        ifname = self.ifname
+        cmd = "ip route list dev "+ ifname + " | awk ' /^default/ {print $3}'"
+        fin,fout = os.popen4(cmd)
+        result = fout.read()
+        return result
+
+    def _get_hw_addr(self):
+        ifname = self.ifname
+        info = fcntl.ioctl(self.send_sockfd.fileno(), 0x8927,  struct.pack('256s', ifname[:15]))
+        return ''.join(['%02x:' % ord(char) for char in info[18:24]])[:-1]
+
+    def probe_ip(self, target_ip):
+        sender_mac = self._get_hw_addr() 
+        sender_ip = self._getip()
+        target_addr = "\xff\xff\xff\xff\xff\xff"
+        target_ip = self._get_gateway_ip()
+        etherframe = EthernetFrame(self.ifname, target_addr, sender_addr, 0x806) 
+        arp = arp.ARPPacket(sender_mac, sender_ip, target_addr, target_ip)
+        etherframe.payload = arp.assemble()
+        packet = etherframe.assemble()
+
 
     def _showbit(self, bits):
         print ":".join("{0:x}".format(ord(c)) for c in bits)
@@ -77,6 +105,8 @@ class RawTCPSocket:
         packet = tcppkt.assemble()
         print "\nSending TCP Packet..."
         print tcppkt
+        print self._get_hw_addr()
+        print self._get_gateway_ip()
         ippacket = ip.IPPacket(self.src_ip, self.dst_ip)
         ippacket.set_payload(packet)
         print ippacket

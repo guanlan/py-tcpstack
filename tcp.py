@@ -3,6 +3,7 @@ import socket
 import random, math
 import fcntl
 import struct
+import utils
 
 class TCPPacket:
     def __init__(self, src_ip="", dst_ip="", src_port=0, dst_port=80, data="",\
@@ -61,23 +62,8 @@ class TCPPacket:
         psh = psh + self._header() + self.payload;
         return psh
 
-    def _checksum(self, msg):
-        s = 0
-        # loop taking 2 characters at a time
-        for i in range(0, len(msg), 2):
-            if i < len(msg) and i + 1 < len(msg):
-                w = ord(msg[i]) + (ord(msg[i+1]) << 8 )
-            elif i < len(msg) and i + 1 == len(msg):
-                w = ord(msg[i])
-            s = s + w
-        s = (s>>16) + (s & 0xffff);
-        s = s + (s >> 16);
-        #complement and mask to 4 byte short
-        s = ~s & 0xffff
-        return s
-
     def header(self):
-        csum = self._checksum(self._pseudo_header())
+        csum = utils.checksum(self._pseudo_header())
         return struct.pack('!HHLLBBH' , self.src, self.dst, self.seq, \
                self.ack_seq, self.offset_res, self.flags,  self.win) + \
                struct.pack('H' , csum) + struct.pack('!H' , self.urp)
