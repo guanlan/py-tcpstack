@@ -13,6 +13,10 @@ def urlretrieve(url, file):
     http.connect()
     http.request("GET", referer, {'Referer': referer})
     response = http.get_response()
+    while response == None:
+        http.connect()
+        http.request("GET", referer, {'Referer': referer})
+        response = http.get_response()
     http.close()
     # Write the HTTP response to file
     file = open(file, "w")
@@ -89,7 +93,7 @@ class HTTPConnection:
     def get_response(self):
         data = self.conn.recv(4096)
         # if the length of the data is 0
-        if len(data) == 0:
+        if data == None or len(data) == 0:
             return None 
         data_list = data.split('\r\n')
         # Parse the data
@@ -127,7 +131,10 @@ class HTTPConnection:
                 while read_size < current_size:
                     end_index = bodybuffer.find('\r\n')
                     if end_index == -1 or end_index < current_size:
-                        bodybuffer += self.conn.recv(4096) 
+                        recv = self.conn.recv(4096)  
+                        if recv == None:
+                            return None
+                        bodybuffer += recv
                     elif end_index == current_size:
                         read_size = current_size
                         body += bodybuffer[:end_index]
@@ -139,7 +146,10 @@ class HTTPConnection:
             total_size = int(headers['Content-Length'], 10)
             if total_size > 0:
                 while len(bodybuffer) < total_size:
-                    bodybuffer += self.conn.recv(4096)
+                    recv = self.conn.recv(4096) 
+                    if recv == None:
+                        return None
+                    bodybuffer +=  recv
                 body = bodybuffer
                 
         return HTTPResponse(status, reason, headers, body)

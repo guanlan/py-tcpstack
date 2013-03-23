@@ -1,9 +1,11 @@
 import socket
+import fcntl
 from struct import unpack, pack
+
 class ARPPacket():
     def __init__(self, sender_mac = '',sender_ip = '', 
-            target_mac="\xff\xff\xff\xff\xff\xff", #default boardcast
-            target_ip=''):
+                 target_mac="\xff\xff\xff\xff\xff\xff", #default boardcast
+                 target_ip=''):
         self.hardware_type = 0x001 #Ethernet Type
         self.protocal = 0x0800 #IP Type
         self.hardware_size = 0x006 #Ethernet Size
@@ -15,14 +17,17 @@ class ARPPacket():
         self.target_ip = target_ip 
 
     def __repr__(self):
-        rep = "[*ARP Packet* opcode:%d Src MAC:%s Src IP: %s Tgt Mac:%s Tgt IP:%s]" % (self, opcode, self.eth_addr_repr(self.sender_mac), self.sender_ip, self.eth_addr_repr(self.target_mac), self.target_ip)
+        rep = "[*ARP Packet* opcode:%d Src MAC:%s Src IP: %s Tgt Mac:%s Tgt IP:%s]" % \
+                (self.opcode, self.eth_addr_repr(self.sender_mac), socket.inet_ntoa(self.sender_ip), self.eth_addr_repr(self.target_mac), socket.inet_ntoa(self.target_ip))
         return rep
 
     def disassemble(self, payload):
         #parse ethernet header
-        print "len:"
-        print len(payload)
-        arp = unpack('!HHBBH6s4s6s3s' , payload[:-1])
+        #print "len:", len(payload)
+        # 27 byte = 2 + 2 + 1 + 1 + 2 + 
+        # 44 byte = 2 + 2 + 1 + 1 + 2 + 6 + 4 + 6 + 4 = 28
+        arp = unpack('!HHBBH6s4s6s4s' , payload[:28])
+        #arp = unpack('!HHBBH6s4s6s3s' , payload[:-1])
         self.opcode = arp[4]
         self.sender_mac= arp[5] 
         self.sender_ip = arp[6] 

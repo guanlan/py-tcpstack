@@ -3,24 +3,19 @@ import socket
 import random, math
 import fcntl
 import struct
-import utils
 
 class TCPPacket:
-    def __init__(self, src_ip="127.0.0.1", dst_ip="127.0.0.1", src_port=0, dst_port=80, data="",\
+    def __init__(self, src_ip='', dst_ip='', src_port=0, dst_port=80, payload='',\
                  seq=0, ack_seq=0, offset=0, fin=0, syn=0, \
                  rst=0, psh=0, ack=0, urg=0, win=0, urp=0):
-        # u 16 H
-        self.src_ip = socket.inet_aton(src_ip)
-        self.dst_ip = socket.inet_aton(dst_ip)
-        self.src = src_port
-        self.dst = dst_port
-        # u 32 L
+        self.src_ip = src_ip
+        self.dst_ip = dst_ip
+        self.src_port = src_port
+        self.dst_port = dst_port
         self.seq = seq
         self.ack_seq = ack_seq
-        # u 8 B Default offset is 5 (20 bits)
         self.doff = 5
         self.offset_res = (self.doff <<  4) + 0
-        # u 8 B flag
         self.fin = fin
         self.syn = syn
         self.rst = rst
@@ -29,25 +24,40 @@ class TCPPacket:
         self.urg = urg
         self.flags = fin + (syn << 1) + (rst << 2) + \
                      (psh << 3) + (ack << 4) + (urg << 5)
-        # u 16 H
         self.win = win
         self.csum = 0
         self.urp = urp
-        self.payload = data
+        self.payload = payload
 
     def __repr__(self):
-        rep = '[*TCP Packet* Source port: %d  Dest port: %d Sequence Number:%d  Acknowledgement: %d  Flag:%d ' % (self.src, self.dst, self.seq, self.ack_seq, self.flags)
+        rep = '[*TCP Packet* Source: %s:%d  Dest: %s:%d Sequence Number:%d  Acknowledgement: %d  Flag:%d ' \
+                % (socket.inet_ntoa(self.src_ip), self.src_port, socket.inet_ntoa(self.dst_ip), self.dst_port, self.seq, self.ack_seq, self.flags)
         if len(self.payload) == 0:
-            rep += "\'\']"
+            rep += "\'\'>"
         elif len(self.payload) < 100:
             rep += "%s]" % repr(self.payload)
         else:
             rep += "%s]" % repr(self.payload[:100] + '...')
         return rep
 
+    def _checksum(self, msg):
+        s = 0
+        # loop taking 2 characters at a time
+        for i in range(0, len(msg), 2):
+            if i < len(msg) and i + 1 < len(msg):
+                w = ord(msg[i]) + (ord(msg[i+1]) << 8 )
+            elif i < len(msg) and i + 1 == len(msg):
+                w = ord(msg[i])
+            s = s + w
+        s = (s>>16) + (s & 0xffff);
+        s = s + (s >> 16);
+        #complement and mask to 4 byte short
+        s = ~s & 0xffff
+        return s
+
     def _header(self):
         return  struct.pack('!HHLLBBHHH', \
-                            self.src, self.dst, self.seq, \
+                            self.src_port, self.dst_port, self.seq, \
                             self.ack_seq, self.offset_res, \
                             self.flags, self.win, self.csum, \
                             self.urp)
@@ -62,35 +72,47 @@ class TCPPacket:
         psh = psh + self._header() + self.payload;
         return psh
 
+
     def header(self):
-        csum = utils.checksum(self._pseudo_header())
-        return struct.pack('!HHLLBBH' , self.src, self.dst, self.seq, \
+        csum = self._checksum(self._pseudo_header())
+        return struct.pack('!HHLLBBH' , self.src_port, self.dst_port, self.seq, \
                self.ack_seq, self.offset_res, self.flags,  self.win) + \
                struct.pack('H' , csum) + struct.pack('!H' , self.urp)
+
+    def set_payload(self, payload):
+        self.payload = payload
 
     def assemble(self):
         return self.header() + self.payload 
     
     def dissemble(self, buf):
         # Parse the initial 20 bits
-        self.src, self.dst, \
+        self.src_port, self.dst_port, \
         seq, ack_seq, \
         self.offset_res, self.flags, \
         self.win, self.csum, self.urp = struct.unpack('!HHLLBBHHH', buf[:20])
-
         self.seq = long(seq)
         self.ack_seq = long(ack_seq)
-
         self.fin = self.flags & 0x01
         self.syn = self.flags & 0x02
         self.rst = self.flags & 0x04
         self.psh = self.flags & 0x08
         self.ack = self.flags & 0x10
         self.urg = self.flags & 0x20
-
         # Parse the Option bits
         offset=self.offset_res >> 4
-        # Parse the data bits
+        if (offset > 5):
+            i = 5
+            while i < offset:
+                op_kind, = struct.unpack('!B', buf[i*4:i*4+1])
+                if op_kind == 0:
+                    break
+                if op_kind == 2:
+                    op_len, = struct.unpack('!B', buf[i*4+1:i*4+2])
+                    op_data, = struct.unpack('!H', buf[i*4+2:i*4+4])
+                    self.mss = op_data
+                i += 1
 
+        # Parse the data bits
         self.payload=buf[offset*4:]
         return self

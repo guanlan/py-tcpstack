@@ -6,9 +6,7 @@ import struct
 import utils
 
 class IPPacket:
-    def __init__(self, src_ip='127.0.0.1', dst_ip='127.0.0.1'):
-        self.src_ip = src_ip
-        self.dst_ip = dst_ip
+    def __init__(self, src_ip='', dst_ip=''):
         self.ver = 4
         self.ihl = 5
         self.ver_ihl = (self.ver << 4) + self.ihl
@@ -19,13 +17,13 @@ class IPPacket:
         self.ttl = 64
         self.protocol = socket.IPPROTO_TCP
         self.cksum = 0
-        self.saddr = socket.inet_aton(self.src_ip)
-        self.daddr = socket.inet_aton(self.dst_ip)
+        self.src_ip = src_ip
+        self.dst_ip = dst_ip
         self.payload = ""
 
     def __repr__(self):
         rep = "[*IP Packet* ver:%d id=%d proto=%d src=%s dst=%s datalen=%d]" % \
-               (self.ver, self.id, self.protocol, socket.inet_ntoa(self.saddr), socket.inet_ntoa(self.daddr),
+               (self.ver, self.id, self.protocol, socket.inet_ntoa(self.src_ip), socket.inet_ntoa(self.dst_ip),
                 self.tot_len)
         return rep  
 
@@ -40,11 +38,11 @@ class IPPacket:
 
     def assemble(self):
         header = self._header() 
-        self.cksum = utils.checksum(header + '\000\000' + self.saddr +
-                                  self.daddr)
+        self.cksum = utils.checksum(header + '\000\000' + self.src_ip +
+                                  self.dst_ip)
         packet = [self._header(), 
                     struct.pack('H', self.cksum), 
-                    self.saddr, self.daddr, 
+                    self.src_ip, self.dst_ip, 
                     self.payload]
         return ''.join(packet)
 
@@ -58,7 +56,7 @@ class IPPacket:
         self.ttl = res[5]
         self.protocol = res[6]
         self.csum = res[7]
-        self.saddr = res[8]
-        self.daddr = res[9]
+        self.src_ip = res[8]
+        self.dst_ip = res[9]
         self.payload = buf[20:]
 
