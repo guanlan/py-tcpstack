@@ -13,15 +13,16 @@ def urlretrieve(url, file):
     http.connect()
     http.request("GET", referer, {'Referer': referer})
     response = http.get_response()
-    while response == None:
-        http.connect()
-        http.request("GET", referer, {'Referer': referer})
-        response = http.get_response()
     http.close()
-    # Write the HTTP response to file
-    file = open(file, "w")
-    file.write(response.body)
-    file.close()
+    if response == None:
+        print "HTTP Error: connection terminates"
+    elif not response.status == 200:
+        print "HTTP Error:", "Code[%g]" %(response.status)
+    else:
+        # Write the HTTP response to file
+        file = open(file, "w")
+        file.write(response.body)
+        file.close()
 
 def getname(url):
     """ Given an URL, return the page name of the html file """
@@ -48,7 +49,7 @@ def _gethostpath(url):
             path = "/"
     return host, path
 
-
+""" HTTPRequest contains the requested header and data """
 class HTTPRequest:
     def __init__(self, method, url, headers, body=''):
         self.method = method
@@ -66,6 +67,7 @@ class HTTPRequest:
         return string.join(request_message, '\r\n')
 
 
+""" HTTPResponse contains the recieved response header and data """
 class HTTPResponse:
     def __init__(self, status, reason, headers, body=None):
         self.status = status
@@ -73,7 +75,7 @@ class HTTPResponse:
         self.headers = headers
         self.body = body
 
-
+""" HTTPConnection provides connection to the certain hostname """
 class HTTPConnection:
     def __init__(self, hostname, port=80):
         self.port = port
@@ -92,11 +94,11 @@ class HTTPConnection:
         
     def get_response(self):
         data = self.conn.recv(4096)
-        # if the length of the data is 0
+        # if the length of the data or no data received, return nothing
         if data == None or len(data) == 0:
             return None 
         data_list = data.split('\r\n')
-        # Parse the data
+        # else parse the data
         header_list = []
         body_list = []
         index = data_list.index('')
@@ -120,8 +122,8 @@ class HTTPConnection:
         body = ''
         if headers.has_key('Transfer-Encoding') and \
            headers['Transfer-Encoding'] == 'chunked':
-        # If it is chunked data, it will end until there is a zero
-        # number\r\nstring\r\nnumber\r\nstring\r\n0\r\n\r\n
+            # If it is chunked data, it will end until there is a zero
+            # number\r\nstring\r\nnumber\r\nstring\r\n0\r\n\r\n
             current_size = 1
             while not current_size == 0 and not bodybuffer == '':
                 end_index = bodybuffer.find('\r\n')
@@ -139,9 +141,9 @@ class HTTPConnection:
                         read_size = current_size
                         body += bodybuffer[:end_index]
                         bodybuffer = bodybuffer[end_index + 2:]
-        # If it is the regular data given the length, it will end until
-        # data with the given length is all received
         elif headers.has_key('Content-Length'):
+            # If it is the regular data given the length, it will end until
+            # data with the given length is all received
             bodybuffer = string.join(body_list, '\r\n')
             total_size = int(headers['Content-Length'], 10)
             if total_size > 0:
@@ -151,19 +153,7 @@ class HTTPConnection:
                         return None
                     bodybuffer +=  recv
                 body = bodybuffer
-                
         return HTTPResponse(status, reason, headers, body)
         
     def close(self):
         self.conn.close()
-   
-
-def main():
-    """ Login the host with the given username and password,
-    if there is a wrong password, it should be stopped """
-
-
-
-
-if __name__ == '__main__': 
-    main()

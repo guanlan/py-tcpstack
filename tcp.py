@@ -3,7 +3,9 @@ import socket
 import random, math
 import fcntl
 import struct
+import utils
 
+""" TCPPacket is the whole TCP packet """
 class TCPPacket:
     def __init__(self, src_ip='', dst_ip='', src_port=0, dst_port=80, payload='',\
                  seq=0, ack_seq=0, offset=0, fin=0, syn=0, \
@@ -31,7 +33,9 @@ class TCPPacket:
 
     def __repr__(self):
         rep = '[*TCP Packet* Source: %s:%d  Dest: %s:%d Sequence Number:%d  Acknowledgement: %d  Flag:%d ' \
-                % (socket.inet_ntoa(self.src_ip), self.src_port, socket.inet_ntoa(self.dst_ip), self.dst_port, self.seq, self.ack_seq, self.flags)
+                % (socket.inet_ntoa(self.src_ip), self.src_port, \
+                socket.inet_ntoa(self.dst_ip), self.dst_port, \
+                self.seq, self.ack_seq, self.flags)
         if len(self.payload) == 0:
             rep += "\'\'>"
         elif len(self.payload) < 100:
@@ -72,7 +76,6 @@ class TCPPacket:
         psh = psh + self._header() + self.payload;
         return psh
 
-
     def header(self):
         csum = self._checksum(self._pseudo_header())
         return struct.pack('!HHLLBBH' , self.src_port, self.dst_port, self.seq, \
@@ -93,12 +96,12 @@ class TCPPacket:
         self.win, self.csum, self.urp = struct.unpack('!HHLLBBHHH', buf[:20])
         self.seq = long(seq)
         self.ack_seq = long(ack_seq)
-        self.fin = self.flags & 0x01
-        self.syn = self.flags & 0x02
-        self.rst = self.flags & 0x04
-        self.psh = self.flags & 0x08
-        self.ack = self.flags & 0x10
-        self.urg = self.flags & 0x20
+        self.fin = (self.flags & 0x01) 
+        self.syn = (self.flags & 0x02)
+        self.rst = (self.flags & 0x04)
+        self.psh = (self.flags & 0x08)
+        self.ack = (self.flags & 0x10)
+        self.urg = (self.flags & 0x20)
         # Parse the Option bits
         offset=self.offset_res >> 4
         if (offset > 5):
@@ -112,7 +115,6 @@ class TCPPacket:
                     op_data, = struct.unpack('!H', buf[i*4+2:i*4+4])
                     self.mss = op_data
                 i += 1
-
         # Parse the data bits
         self.payload=buf[offset*4:]
         return self

@@ -3,6 +3,7 @@ import fcntl
 from struct import unpack, pack
 
 class ARPPacket():
+    """ ARPPacket provides the whole ARP packet """
     def __init__(self, sender_mac = '',sender_ip = '', 
                  target_mac="\xff\xff\xff\xff\xff\xff", #default boardcast
                  target_ip=''):
@@ -18,16 +19,15 @@ class ARPPacket():
 
     def __repr__(self):
         rep = "[*ARP Packet* opcode:%d Src MAC:%s Src IP: %s Tgt Mac:%s Tgt IP:%s]" % \
-                (self.opcode, self.eth_addr_repr(self.sender_mac), socket.inet_ntoa(self.sender_ip), self.eth_addr_repr(self.target_mac), socket.inet_ntoa(self.target_ip))
+                (self.opcode, self.eth_addr_repr(self.sender_mac), \
+                socket.inet_ntoa(self.sender_ip), self.eth_addr_repr(self.target_mac), \
+                socket.inet_ntoa(self.target_ip))
         return rep
 
     def disassemble(self, payload):
         #parse ethernet header
-        #print "len:", len(payload)
-        # 27 byte = 2 + 2 + 1 + 1 + 2 + 
-        # 44 byte = 2 + 2 + 1 + 1 + 2 + 6 + 4 + 6 + 4 = 28
+        # 2 + 2 + 1 + 1 + 2 + 6 + 4 + 6 + 4 = 28
         arp = unpack('!HHBBH6s4s6s4s' , payload[:28])
-        #arp = unpack('!HHBBH6s4s6s3s' , payload[:-1])
         self.opcode = arp[4]
         self.sender_mac= arp[5] 
         self.sender_ip = arp[6] 
@@ -52,28 +52,3 @@ class ARPPacket():
 
     def _addr_to_num(self, addr):
         res = pack('!4B', *[int(x) for x in addr.split('.')])
-
-if __name__ == "__main__":
-    s = socket.socket( socket.AF_PACKET , socket.SOCK_RAW)
-    ifname = 'wlan0'
-    target_ipaddr = '192.168.2.1'
-    info = fcntl.ioctl(s.fileno(), 0x8927,  pack('256s', ifname[:15]))
-    sender_addr = info[18:24]
-    dst_addr = "\xff\xff\xff\xff\xff\xff"
-    etherframe = EthernetFrame(ifname,dst_addr, sender_addr, 0x806) 
-    print etherframe
-    daddr = pack('!4B', *[int(x) for x in target_ipaddr.split('.')])
-    saddr = fcntl.ioctl(s.fileno(),0x8915,  # SIOCGIFADDR
-                              pack('256s', ifname[:15]))[20:24] 
-    frame = [
-    ### ARP ###
-        pack('!HHBB', 0x0001, 0x0800, 0x0006, 0x0004),
-        pack('!H', 0x0001),
-        sender_addr, 
-        saddr, 
-        pack('!6B', *(0,) * 6),
-        daddr
-    ]
-    etherframe.payload = ''.join(frame)
-    s.bind(("wlan0", socket.SOCK_RAW))
-    s.send(etherframe.assemble())

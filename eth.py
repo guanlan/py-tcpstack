@@ -1,6 +1,8 @@
 import socket
-from struct import *
+from struct import unpack, pack
+
 class EthernetFrame():
+    """ EthernetFrame provides the ethernet frame header and paylod"""
     def __init__(self, des_mac='', src_mac='', ether_type = 4, payload = ''):
         self.eth_length = 14
         self.des_mac = des_mac
@@ -9,7 +11,9 @@ class EthernetFrame():
         self.payload = payload 
 
     def __repr__(self):
-        rep = "<*Eth Frame* Dest MAC: %s  Src MAC: %s Protocol:%d>" % (self.eth_addr_repr(self.des_mac),self.eth_addr_repr(self.src_mac), self.ether_type)
+        rep = "<*Eth Frame* Dest MAC: %s  Src MAC: %s Protocol:%d>" % \
+                (self.eth_addr_repr(self.des_mac), self.eth_addr_repr(self.src_mac), \
+                self.ether_type)
         return rep
 
     def disassemble(self, packet):
@@ -28,5 +32,6 @@ class EthernetFrame():
         return packet
 
     def eth_addr_repr(self, a) :
-        b = "%.2x:%.2x:%.2x:%.2x:%.2x:%.2x" % (ord(a[0]) , ord(a[1]) , ord(a[2]), ord(a[3]), ord(a[4]) , ord(a[5]))
-        return b
+        bits = "%.2x:%.2x:%.2x:%.2x:%.2x:%.2x" % \
+        (ord(a[0]) , ord(a[1]) , ord(a[2]), ord(a[3]), ord(a[4]) , ord(a[5]))
+        return bits
