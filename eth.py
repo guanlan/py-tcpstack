@@ -2,7 +2,7 @@ import socket
 from struct import unpack, pack
 
 class EthernetFrame():
-    """ EthernetFrame provides the ethernet frame header and paylod"""
+    """ EthernetFrame provides the ethernet frame header and paylod """ 
     def __init__(self, des_mac='', src_mac='', ether_type = 4, payload = ''):
         self.eth_length = 14
         self.des_mac = des_mac

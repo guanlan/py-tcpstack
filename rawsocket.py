@@ -67,8 +67,8 @@ class RawSocketConnection:
                               SIOCGIFADDR, struct.pack('256s', self.ifname[:15]))[20:24]
             return ip
         except IOError:
-           print "Couldn't get IP on %s" % self.ifname
-           sys.exit(1)
+            print "Ethernet : Couldn't get IP on %s" % self.ifname
+            sys.exit(1)
 
     def _get_gateway_ip(self):
         fh = open("/proc/net/route")
@@ -84,14 +84,14 @@ class RawSocketConnection:
         return info[18:24]
 
     def probe_gateway_mac(self):
-        if self.gateway_mac  != None:
+        if self.gateway_mac != None:
             return self.gateway_mac
         sender_addr = self._get_hw_addr() 
         sender_ip = self._getip()
-        target_addr = "\xff\xff\xff\xff\xff\xff" #Boardcast addr
+        target_addr = "\xff\xff\xff\xff\xff\xff" #Boardcast address
         target_ip = self._get_gateway_ip()
         if target_ip  == None:
-            print "Can't get gateway IP!"
+            print "Ethernet : Can't get gateway IP!"
             sys.exit(1)
         ether_frame = eth.EthernetFrame(target_addr, sender_addr, ETH_P_ARP) 
         arppkt = arp.ARPPacket(sender_addr, sender_ip, target_addr, target_ip)
@@ -180,11 +180,11 @@ class RawSocketConnection:
             if tcp_pkt.flags == 0x10 and tcp_pkt.ack_seq == self.seq and len(tcp_pkt.payload) == 0:
                 self._send(rst=1)
                 sys.exit("TCP Error: Duplicate Acks received")
-
             return tcp_pkt
         return None
 
     def _recv(self, byte):
+        """ Receive TCP packet and return the payload """
         maxtry = 3
         tcp_pkt = self._parse_packet(byte)
         # resend the packet for 3 times 
@@ -207,10 +207,11 @@ class RawSocketConnection:
         return tcp_pkt.payload
 
     def connect(self, (hostname, port)):
+        """ connect to the given hostname and port """
         self.dst_ip = socket.inet_aton(socket.gethostbyname(hostname))
         self.dst_port = port
 
-        self.seq = random.randint(1, 1024)
+        self.seq = random.randint(1, 65535)
         self.ack_seq = 0
         self._send(syn=1)
         payload = self._recv(MAX_BUF_SIZE)
@@ -221,10 +222,12 @@ class RawSocketConnection:
         self._send(ack=1)
 
     def send(self, data):
+        """ send packet and receive the acknowledgement from server """
         self._send(data=data, ack=1)
         self._recv(MAX_BUF_SIZE)
 
     def recv(self, max_size):
+        """ Receive data from server """
         recv_data = self._recv(max_size)
         # if failed to receive ack, terminate transmission
         if recv_data == -1:
@@ -235,6 +238,7 @@ class RawSocketConnection:
         return recv_data
 
     def close(self):
+        """ Close connection """
         self._send(fin=1, ack=1)
         payload = self._recv(MAX_BUF_SIZE)
         # if failed to receive ack, terminate transmission

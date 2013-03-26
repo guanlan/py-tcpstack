@@ -101,6 +101,8 @@ class HTTPConnection:
         # else parse the data
         header_list = []
         body_list = []
+        if not '' in data_list:
+            return None
         index = data_list.index('')
         header_list = data_list[:index]
         if header_list == ['0']:

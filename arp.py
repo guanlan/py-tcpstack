@@ -26,7 +26,6 @@ class ARPPacket():
 
     def disassemble(self, payload):
         #parse ethernet header
-        # 2 + 2 + 1 + 1 + 2 + 6 + 4 + 6 + 4 = 28
         arp = unpack('!HHBBH6s4s6s4s' , payload[:28])
         self.opcode = arp[4]
         self.sender_mac= arp[5] 
